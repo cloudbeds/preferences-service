@@ -1,12 +1,18 @@
 import redis
 import json
+import os
+from dotenv import load_dotenv
 from flask import Flask, request
-from flask_restful import Resource, Api, reqparse
-from redis.commands.json.path import Path
+from flask_restful import Resource, Api
+
+load_dotenv()
+
+redisHost = os.environ.get("redis-host") or 'localhost'
+redisPort = os.environ.get("redis-port") or 6379
 
 app = Flask(__name__)
 api = Api(app)
-redisClient = redis.Redis(host='localhost', port=6379)
+redisClient = redis.Redis(host=redisHost, port=redisPort)
 
 templatePreference = {
   'id': 'user:unknown',
