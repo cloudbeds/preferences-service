@@ -10,6 +10,8 @@ load_dotenv()
 redisHost = os.environ.get("redis-host") or 'localhost'
 redisPort = os.environ.get("redis-port") or 6379
 
+print("Attempting to connecting to redis host: ", redisHost)
+
 app = Flask(__name__)
 api = Api(app)
 redisClient = redis.Redis(host=redisHost, port=redisPort)
