@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, request
 from flask_restful import Resource, Api
+from flask_cors import CORS
 
 load_dotenv()
 
@@ -13,29 +14,46 @@ redisPort = os.environ.get("redis-port") or 6379
 print("Attempting to connecting to redis host: ", redisHost)
 
 app = Flask(__name__)
+CORS(app)
 api = Api(app)
+
 redisClient = redis.Redis(host=redisHost, port=redisPort)
 
 templatePreference = {
   'id': 'user:unknown',
   'label': '',
   'recentlyViewed': [],
-  'darkMode': 'false',
+  'darkMode': False,
   'pinMenu': [],
   'favorites': [],
 }
 
 class PreferencesResource(Resource):
   def get(self):
-    id = request.args.get('id')
+    id = str(request.args.get('id'))
 
     if not id:
       return "Must supply id", 400
 
-    retrievedPreference = json.loads(redisClient.get(id))
+    retrievedPreferenceString = redisClient.get(id)
+
+    if not retrievedPreferenceString:
+      return {'preference': {**templatePreference, **{ 'id': id }}}, 200
+
+    retrievedPreference = json.loads(retrievedPreferenceString)
     preference = {**templatePreference, **retrievedPreference}
 
     return {'preference': preference}, 200
+  
+  def delete(self):
+    id = str(request.args.get('id'))
+
+    if not id:
+      return "Must supply id", 400
+
+    redisClient.delete(id)
+
+    return {'message': "Deleted"}, 200
 
   def patch(self):
     incomingPreference = request.json
@@ -48,7 +66,13 @@ class PreferencesResource(Resource):
     if not id:
       return {"error": "Must supply an id to change"}, 500
 
-    retrievedPreference = json.loads(redisClient.get(id))
+    retrievedPreferenceString = redisClient.get(id)
+
+    retrievedPreference = {}
+
+    if retrievedPreferenceString:
+      retrievedPreference = json.loads(retrievedPreferenceString)
+
     preference = {**templatePreference, **retrievedPreference, **incomingPreference}
 
     redisClient.set(id, json.dumps(preference))
@@ -62,11 +86,12 @@ class HistoryResource(Resource):
     if not id:
       return "Must supply id", 400
 
-    retrievedPreference = json.loads(redisClient.get(id))
+    retrievedPreferenceString = redisClient.get(id)
 
-    if not retrievedPreference:
-      return "No preference found", 400
+    if not retrievedPreferenceString:
+      return {'history': []}, 404
 
+    retrievedPreference = json.loads(retrievedPreferenceString)
     history = retrievedPreference.get("recentlyViewed", [])
     
     return {'history': history}, 200
@@ -84,7 +109,12 @@ class HistoryResource(Resource):
 
     incomingRecentlyViewed = incoming.get("viewed")
 
-    preference = json.loads(redisClient.get(id))
+    retrievedPreferenceString = redisClient.get(id)
+
+    if not retrievedPreferenceString:
+      return {'history': []}, 404
+
+    preference = json.loads(retrievedPreferenceString)
 
     if not preference:
       preference = templatePreference
