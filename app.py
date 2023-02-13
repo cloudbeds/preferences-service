@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, request
 from flask_restful import Resource, Api
+from flask_sse import sse
 from flask_cors import CORS
 
 load_dotenv()
@@ -14,10 +15,19 @@ redisPort = os.environ.get("redis-port") or 6379
 print("Attempting to connecting to redis host: ", redisHost)
 
 app = Flask(__name__)
-CORS(app)
+
+CORS(app, resources={
+  r"/preferences/*": {"origins": "*"},
+  r"/history/*": {"origins": "*"},
+  r"/stream/*": {"origins": "*"}
+}, supports_credentials=True)
+resources={r"/api/*": {"origins": "*"}}
 api = Api(app)
 
 redisClient = redis.Redis(host=redisHost, port=redisPort)
+app.config["REDIS_URL"] = f'redis://{redisHost}:{redisPort}/0'
+
+app.register_blueprint(sse, url_prefix='/stream')
 
 templatePreference = {
   'id': 'user:unknown',
@@ -76,6 +86,7 @@ class PreferencesResource(Resource):
     preference = {**templatePreference, **retrievedPreference, **incomingPreference}
 
     redisClient.set(id, json.dumps(preference))
+    sse.publish({"message": json.dumps(preference)}, type='preference_update', channel=id)
 
     return {'preference': preference}, 200
 
@@ -127,6 +138,7 @@ class HistoryResource(Resource):
       preference['recentlyViewed'] = history[:10]
 
     redisClient.set(id, json.dumps(preference))
+    sse.publish({"message": json.dumps(preference)}, type='preference_update', channel=id)
 
     return {'history': preference}, 200
 
